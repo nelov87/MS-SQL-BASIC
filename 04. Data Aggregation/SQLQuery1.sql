@@ -99,3 +99,71 @@ ORDER BY DepositGroup DESC, IsDepositExpired
 
 -- 12 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+
+
+-- 13 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT e.DepartmentID, SUM(e.Salary) FROM Employees AS e
+GROUP BY e.DepartmentID
+ORDER BY e.DepartmentID ASC
+
+-- 14 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT e.DepartmentID, MIN(e.Salary) FROM Employees AS e
+WHERE e.HireDate > '01/01/2000' AND e.DepartmentID IN (2, 5, 7)
+GROUP BY e.DepartmentID
+
+-- 15 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT * INTO NewEmployees FROM Employees AS e
+WHERE e.Salary > 30000
+
+DELETE FROM NewEmployees
+WHERE ManagerID = 42
+
+UPDATE NewEmployees
+SET Salary += 5000
+WHERE DepartmentID = 1
+
+SELECT ne.DepartmentID, AVG(ne.Salary) FROM NewEmployees AS ne
+GROUP BY ne.DepartmentID
+
+-- 16 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT e.DepartmentID, MAX(e.Salary) FROM Employees AS e
+GROUP BY e.DepartmentID
+HAVING MAX(e.Salary) < 30000 OR MAX(e.Salary) > 70000
+
+-- 17 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT COUNT(e.Salary) FROM Employees AS e
+GROUP BY ManagerID
+HAVING ManagerID IS NULL
+
+-- 18 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT DISTINCT
+	Ranked.DepartmentID, Ranked.Salary
+FROM
+(SELECT e.DepartmentID, Salary, 
+	DENSE_RANK() 
+	OVER(PARTITION BY DepartmentId ORDER BY Salary DESC) 
+	AS [Rank] 
+	FROM Employees 
+	AS e) AS [Ranked]
+WHERE Ranked.[Rank] = 3
+
+-- 19 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT FirstName, LastName, DepartmentID FROM (SELECT e.DepartmentID,  FROM Employees AS e)
+WHERE Salary 
+
+
+
+
+SELECT 'd' AS dd, [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16] FROM (SELECT DepartmentID, Salary FROM Employees AS src) AS e
+PIVOT(
+	SUM(e.Salary)
+	FOR DepartmentID IN ([1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16])
+) AS PivotTable
+
