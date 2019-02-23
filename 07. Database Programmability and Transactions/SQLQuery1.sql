@@ -215,3 +215,201 @@ EXEC dbo.usp_CalculateFutureValueForAccount 1, 0.1
 
 -- 13 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+SELECT 
+  ROW_NUMBER() OVER(ORDER BY Source.Cash DESC) AS Row#,
+  Source.Cash
+FROM (
+	SELECT ug.Cash, g.[Name] FROM Users AS u
+		JOIN UsersGames AS ug ON u.Id = ug.UserId
+		JOIN Games AS g ON ug.GameId = g.Id
+	WHERE g.[Name] = 'Love in a mist'
+) AS Source
+
+GO
+
+CREATE FUNCTION dbo.ufn_CashInUsersGames (@gameName NVARCHAR(50))
+RETURNS TABLE
+AS
+RETURN 
+	SELECT SUM(s.Cash) AS [SumCash] FROM (
+				SELECT 
+				ROW_NUMBER() OVER(ORDER BY Source.Cash DESC) AS Row#,
+				Source.Cash
+			FROM (
+				SELECT ug.Cash, g.[Name] FROM Users AS u
+					JOIN UsersGames AS ug ON u.Id = ug.UserId
+					JOIN Games AS g ON ug.GameId = g.Id
+				WHERE g.[Name] = @gameName
+				) AS Source
+	) AS s
+	WHERE s.Row# % 2 = 1
+
+GO
+
+SELECT * FROM dbo.ufn_CashInUsersGames('Love in a mist')
+
+-- 14 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+CREATE TABLE  Logs (
+LogId INT IDENTITY(1,1),
+AccountId INT NOT NULL,
+OldSum MONEY NOT NULL,
+NewSum MONEY NOT NULL
+)
+GO
+
+CREATE TRIGGER tr_AddToLogsTable ON Accounts FOR UPDATE
+AS
+
+INSERT INTO Logs
+	SELECT i.Id, d.Balance, i.Balance FROM inserted AS i
+		JOIN deleted AS d ON i.Id = d.Id
+
+
+GO
+
+
+UPDATE Accounts
+SET Balance += 100
+WHERE Id = 2
+
+SELECT * FROM Accounts
+
+-- 15 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+CREATE TABLE NotificationEmails(
+Id INT IDENTITY(1,1) ,
+Recipient INT NOT NULL,
+[Subject] NVARCHAR(MAX) NOT NULL, 
+Body NVARCHAR(MAX) NOT NULL
+)
+
+GO
+
+CREATE TRIGGER tr_EmailEvents ON Logs FOR INSERT
+AS
+
+INSERT INTO NotificationEmails
+	SELECT i.AccountId, CONCAT('Balance change for account: ', i.AccountId), CONCAT('On ', GETDATE(), ' your balance was changed from ', i.OldSum,' to ', i.NewSum,'.') FROM inserted AS i
+
+
+GO
+
+-- 16 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+CREATE OR ALTER PROC dbo.usp_DepositMoney (@AccountId INT, @MoneyAmount MONEY)
+AS
+BEGIN
+	BEGIN TRAN
+		IF(@AccountId NOT IN (SELECT a.Id FROM Accounts AS a))
+			BEGIN
+				ROLLBACK
+				RETURN
+			END
+			
+		IF(@MoneyAmount <= 0)
+			BEGIN
+				ROLLBACK
+				RETURN
+			END
+			
+		UPDATE Accounts
+		SET Balance += @MoneyAmount
+		WHERE Id = @AccountId
+			
+	COMMIT
+END
+
+
+
+EXEC dbo.usp_DepositMoney 1, 10
+
+
+-- 17 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+GO
+
+
+CREATE PROC dbo.usp_WithdrawMoney (@AccountId INT, @MoneyAmount MONEY)
+AS
+BEGIN
+	BEGIN TRAN
+		IF(@AccountId NOT IN (SELECT a.Id FROM Accounts AS a))
+			BEGIN
+				ROLLBACK
+				RETURN
+			END
+		IF(@MoneyAmount <= 0)
+			BEGIN
+				ROLLBACK
+				RETURN
+			END
+			
+		UPDATE Accounts
+		SET Balance -= @MoneyAmount
+		WHERE Id = @AccountId
+	COMMIT
+END
+
+
+-- 18 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+GO
+
+CREATE PROC dbo.usp_TransferMoney (@SenderId INT, @ReceiverId INT, @Amount MONEY)
+AS
+BEGIN
+	BEGIN TRAN
+		EXEC dbo.usp_WithdrawMoney @SenderId, @Amount
+
+		EXEC dbo.usp_DepositMoney @ReceiverId, @Amount
+
+	COMMIT
+END
+
+-- 19 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+GO
+
+CREATE PROC usp_AssignProject(@emloyeeId INT, @projectID INT)
+AS
+BEGIN
+BEGIN TRAN
+	IF((SELECT COUNT(ep.EmployeeID) FROM EmployeesProjects AS ep  WHERE ep.EmployeeID = @emloyeeId) >= 3)
+	BEGIN
+		RAISERROR('The employee has too many projects!', 16, 1)
+		ROLLBACK
+		RETURN
+	END
+
+		INSERT INTO EmployeesProjects( EmployeeID, ProjectID)
+		VALUES 
+		(@emloyeeId, @projectID)
+
+	COMMIT
+END
+
+EXEC dbo.usp_AssignProject 2, 2
+
+
+-- 20 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+CREATE TABLE Deleted_Employees
+(
+EmployeeId INT PRIMARY KEY NOT NULL, 
+FirstName NVARCHAR(50) NOT NULL, 
+LastName NVARCHAR(50) NOT NULL, 
+MiddleName NVARCHAR(50) NOT NULL, 
+JobTitle NVARCHAR(50) NOT NULL, 
+DepartmentId INT FOREIGN KEY REFERENCES [dbo].[Departments]([DepartmentID]) NOT NULL, 
+Salary MONEY NOT NULL
+)
+
+GO
+
+CREATE TRIGGER tr_MoveToDeletedEmployees ON [dbo].[Employees] AFTER DELETE
+AS
+
+INSERT INTO Deleted_Employees SELECT d.EmployeeID, d.FirstName, d.LastName, d.MiddleName, d.JobTitle, d.DepartmentID, d.Salary FROM deleted AS d
+
+
+
